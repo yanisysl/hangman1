@@ -1,0 +1,16 @@
+<RCC>
+    <qresource prefix="/"/>
+    <qresource prefix="/new/imagini">
+        <file>hangman_poza.qrc</file>
+        <file>hangman1.jpg</file>
+        <file>hangman2.jpg</file>
+        <file>hangman3.jpg</file>
+        <file>hangman4.jpg</file>
+        <file>hangman5.jpg</file>
+        <file>hangman6.jpg</file>
+        <file>hangman7.jpg</file>
+    </qresource>
+    <qresource prefix="/cuvinte">
+        <file>cuvinte.txt</file>
+    </qresource>
+</RCC>
