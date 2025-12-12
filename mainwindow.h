@@ -20,7 +20,7 @@ private slots:
     void on_playButton_clicked();
     void on_IesireButton_clicked();
 
-    void showMenuAgain();   // nou – slot pentru revenire din joc
+    void showMenuAgain();   //  revenire din joc
 
 private:
     Ui::MainWindow *ui;

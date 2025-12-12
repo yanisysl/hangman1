@@ -1,390 +1,222 @@
 #include "main_joc.h"
-
 #include <QFile>
 #include <QTextStream>
 #include <QKeyEvent>
-#include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QFont>
+#include <QFontDatabase>
 #include <ctime>
-#include <cstdlib>
 
-// constructorul clasei main_joc
-main_joc::main_joc(QWidget *parent) :
-    QWidget(parent),
-    wrongGuesses(0),   // numarul de greseli la inceput este 0
-    maxWrong(11),      // numarul maxim de greseli permise
-    score(0),          // scorul incepe de la 0
-    lives(11),         // numarul de vieti la inceput
-    gameOver(false)    // jocul nu e terminat la inceput
+main_joc::main_joc(QWidget *parent)
+    : QWidget(parent), wrongGuesses(0), maxWrong(6), score(0), lives(6), gameOver(false)
 {
-    // setez culoarea de fundal a ferestrei de joc
-    setStyleSheet("background-color: #fafafa;");
+    setFixedSize(800, 720);
+    setWindowFlag(Qt::WindowMaximizeButtonHint, false);
+    setWindowFlag(Qt::CustomizeWindowHint);
 
-    // label pentru desenul spanzuratorii (desen ascii)
-    hangmanLabel = new QLabel(this);
-    hangmanLabel->setAlignment(Qt::AlignCenter); // pun textul la centru
-    hangmanLabel->setStyleSheet(
-        "font-family: monospace; font-size: 22px; color: #e53935;"
-        );
+    // FONT MONOSPACE
+    QFont mono("Consolas");
+    mono.setStyleHint(QFont::Monospace);
+    mono.setFixedPitch(true);
+    mono.setPointSize(18);
 
-    // label pentru cuvantul curent (_ _ A _ etc.)
-    wordLabel = new QLabel(this);
-    wordLabel->setAlignment(Qt::AlignCenter);
-    wordLabel->setStyleSheet(
-        "font-size: 40px; font-weight: bold; color: #1e88e5;"
-        );
-
-    // label pentru literele folosite
-    usedLabel = new QLabel(this);
-    usedLabel->setAlignment(Qt::AlignCenter);
-    usedLabel->setStyleSheet(
-        "font-size: 18px; color: #ff8f00;"
-        );
-
-    // label pentru scor
-    scoreLabel = new QLabel(this);
-    scoreLabel->setAlignment(Qt::AlignCenter);
-    scoreLabel->setStyleSheet(
-        "font-size: 18px; color: #43a047;"
-        );
-
-    // label pentru vieti
-    livesLabel = new QLabel(this);
-    livesLabel->setAlignment(Qt::AlignCenter);
-    livesLabel->setStyleSheet(
-        "font-size: 18px; color: #f4511e;"
-        );
-
-    // layout pentru "tastatura" cu litere
-    lettersLayout = new QGridLayout();
-    QWidget *lettersWidget = new QWidget(this);
-    lettersWidget->setLayout(lettersLayout);
-
-    // alfabetul pe care il folosesc pentru butoane
-    QString alphabet = "abcdefghijklmnopqrstuvwxyz";
-    int row = 0;
-    int col = 0;
-
-    // creez cate un buton pentru fiecare litera din alfabet
-    for (QChar c : alphabet) {
-        // fac un buton cu textul literei
-        QPushButton *btn = new QPushButton(QString(c), this);
-        // ii dau o dimensiune fixa
-        btn->setFixedSize(50, 50);
-
-        // stil pentru buton, ca sa arate mai modern
-        btn->setStyleSheet(
-            "QPushButton {"
-            "  background-color: #ffffff;"
-            "  border:2px solid #90caf9;"
-            "  border-radius:8px;"
-            "  font-size:20px;"
-            "  color: #0d47a1;"
-            "}"
-            "QPushButton:disabled {"
-            "  background-color: #e3f2fd;"
-            "  border:2px solid #bbdefb;"
-            "  color: #90a4ae;"
-            "}"
-            );
-
-        // adaug butonul in grid pe linia row si coloana col
-        lettersLayout->addWidget(btn, row, col);
-
-        // cand apas pe buton, se apeleaza functia letterClicked()
-        connect(btn, &QPushButton::clicked, this, &main_joc::letterClicked);
-
-        // trec la urmatoarea coloana
-        col++;
-        // daca am 9 coloane, trec pe linia urmatoare
-        if (col == 9) {
-            col = 0;
-            row++;
-        }
+    if (!QFontDatabase::isFixedPitch(mono.family())) {
+        mono = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+        mono.setPointSize(16);
     }
 
-    // buton pentru restart de joc
+    // Spanzuratoare: fiecare linie un QLabel
+    hangmanLayout = new QVBoxLayout();
+    hangmanLayout->setAlignment(Qt::AlignLeft);
+    for (int i = 0; i < 7; ++i) {
+        QLabel *line = new QLabel(this);
+        line->setFont(mono);
+        line->setText(" "); // gol initial
+        line->setAlignment(Qt::AlignLeft);
+        hangmanLines.append(line);
+        hangmanLayout->addWidget(line);
+    }
+
+    // Info
+    wordLabel  = new QLabel(this);
+    wordLabel->setFont(mono);
+    wordLabel->setTextFormat(Qt::PlainText);
+    wordLabel->setAlignment(Qt::AlignCenter);
+
+    usedLabel  = new QLabel(this);
+    scoreLabel = new QLabel(this);
+    livesLabel = new QLabel(this);
+
+    // Tastatura
+    lettersLayout = new QGridLayout();
+    QWidget *keyboardWidget = new QWidget(this);
+    keyboardWidget->setLayout(lettersLayout);
+
+    QString alphabet = "abcdefghijklmnopqrstuvwxyz";
+    int row = 0, col = 0;
+    for (QChar letter : alphabet) {
+        QPushButton *button = new QPushButton(QString(letter), this);
+        button->setFixedSize(40, 40);
+        lettersLayout->addWidget(button, row, col);
+        connect(button, &QPushButton::clicked, this, &main_joc::letterClicked);
+        col++;
+        if (col == 9) { col = 0; row++; }
+    }
+
+    // Butoane
     restartButton = new QPushButton("Restart", this);
-    restartButton->setFixedHeight(45);
-    restartButton->setStyleSheet(
-        "QPushButton {"
-        "  background-color: #1e88e5;"
-        "  color: white;"
-        "  border-radius: 10px;"
-        "  font-size: 18px;"
-        "  padding: 6px 20px;"
-        "}"
-        "QPushButton:hover { background-color: #1565c0; }"
-        "QPushButton:pressed { background-color: #0d47a1; }"
-        );
-    // cand apas pe butonul de restart, apelez functia restartGame()
     connect(restartButton, &QPushButton::clicked, this, &main_joc::restartGame);
 
-    // buton pentru a merge inapoi la meniul principal
     menuButton = new QPushButton("Meniu principal", this);
-    menuButton->setFixedHeight(45);
-    // la inceput acest buton este dezactivat, il activez doar dupa ce se termina jocul
     menuButton->setEnabled(false);
-    menuButton->setStyleSheet(
-        "QPushButton {"
-        "  background-color: #8e24aa;"
-        "  color: white;"
-        "  border-radius: 10px;"
-        "  font-size: 18px;"
-        "  padding: 6px 20px;"
-        "}"
-        "QPushButton:hover { background-color: #6a1b9a; }"
-        "QPushButton:pressed { background-color: #4a148c; }"
-        );
-    // cand apas butonul de meniu, apelez functia backToMenu()
     connect(menuButton, &QPushButton::clicked, this, &main_joc::backToMenu);
 
-    // layout-ul principal
+    // Layout principal
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    // setez margini si spatiu intre elemente
-    mainLayout->setContentsMargins(20, 20, 20, 20);
-    mainLayout->setSpacing(15);
-
-    // adaug desenele si cuvantul
-    mainLayout->addWidget(hangmanLabel);
+    mainLayout->addLayout(hangmanLayout);
     mainLayout->addWidget(wordLabel);
 
-    // layout orizontal pentru informatii (litere folosite, scor, vieti)
     QHBoxLayout *infoLayout = new QHBoxLayout();
     infoLayout->addWidget(usedLabel);
     infoLayout->addWidget(scoreLabel);
     infoLayout->addWidget(livesLabel);
     mainLayout->addLayout(infoLayout);
 
-    // adaug tastatura sub informatii
-    mainLayout->addWidget(lettersWidget);
+    mainLayout->addWidget(keyboardWidget);
 
-    // layout orizontal pentru butoanele de jos (restart si meniu)
     QHBoxLayout *bottomLayout = new QHBoxLayout();
     bottomLayout->addWidget(restartButton);
     bottomLayout->addWidget(menuButton);
     mainLayout->addLayout(bottomLayout);
 
-    // setez acest layout ca layout principal pentru fereastra
-    setLayout(mainLayout);
-
-    // nu las fereastra sa fie maximizata, o tin la o dimensiune fixa
-    setWindowFlag(Qt::WindowMaximizeButtonHint, false);
-    setFixedSize(1000, 750);
-
-    // incarc cuvintele din fisierul din resurse
     loadWords();
-    // pornesc primul joc
     startGame();
 }
 
-// destructor, aici nu trebuie sa fac nimic special
 main_joc::~main_joc() {}
 
-// functie care citeste cuvintele din fisierul de resurse
 void main_joc::loadWords() {
-    // incerc sa deschid fisierul cu cuvinte
     QFile file(":/cuvinte/cuvinte.txt");
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        // daca nu se poate deschide, ies din functie
-        return;
-    }
+    if(!file.open(QIODevice::ReadOnly | QIODevice::Text)) return;
 
-    QTextStream in(&file); // flux text pentru citire
-    while (!in.atEnd()) {
-        // citesc o linie
-        QString line = in.readLine().toLower().trimmed();
-        // daca linia nu e goala, o adaug in lista de cuvinte
-        if (!line.isEmpty())
-            wordList.append(line);
+    QTextStream in(&file);
+    while(!in.atEnd()) {
+        QString word = in.readLine().trimmed().toLower();
+        if(!word.isEmpty())
+            wordList.append(word);
     }
 }
 
-// functie care porneste sau reporneste jocul
 void main_joc::startGame() {
-    // daca nu avem cuvinte, pun un cuvant de rezerva
-    if (wordList.isEmpty()) {
-        secretWord = "eroare";
-    } else {
-        // aleg un cuvant random din vector
-        srand(static_cast<unsigned int>(time(nullptr)));
-        int index = rand() % wordList.size();
-        secretWord = wordList[index];
-    }
-
-    // fac afisarea cu _ _ _ pentru fiecare litera din cuvant
+    srand(static_cast<unsigned int>(time(nullptr)));
+    secretWord = wordList.isEmpty() ? "eroare" : wordList[rand() % wordList.size()];
     currentDisplay = QString(secretWord.size(), '_');
-
-    // curat literele folosite si resetez variabile
     usedLetters.clear();
     wrongGuesses = 0;
     lives = maxWrong;
     score = 0;
     gameOver = false;
 
-    // activez toate butoanele de litere
-    for (int i = 0; i < lettersLayout->count(); ++i) {
-        QPushButton *btn = qobject_cast<QPushButton*>(lettersLayout->itemAt(i)->widget());
-        if (btn)
-            btn->setEnabled(true);
+    for(int i = 0; i < lettersLayout->count(); i++) {
+        QWidget *w = lettersLayout->itemAt(i)->widget();
+        if(w) w->setEnabled(true);
     }
 
-    // dezactivez butonul de meniu cat timp jocul este in desfasurare
     menuButton->setEnabled(false);
-
-    // actualizez afisarea pe ecran
     updateDisplay();
 }
 
-// functie chemata cand apas butonul de restart
-void main_joc::restartGame() {
-    startGame();
-}
-
-// functie care deseneaza spanzuratoarea si afiseaza toate informatiile pe ecran
-void main_joc::updateDisplay() {
-    // siruri cu desene ascii pentru fiecare numar de greseli
-    QString states[12] = {
-        "_________\n|       |\n|\n|\n|\n|\n",
-        "_________\n|       |\n|       O\n|\n|\n|\n",
-        "_________\n|       |\n|       O\n|       |\n|\n|\n",
-        "_________\n|       |\n|       O\n|      /|\n|\n|\n",
-        "_________\n|       |\n|       O\n|      /|\\\n|\n|\n",
-        "_________\n|       |\n|       O\n|      /|\\\n|      /\n|\n",
-        "_________\n|       |\n|       O\n|      /|\\\n|      / \\\n|\n",
-        "_________\n|       |\n|      \\O\n|      /|\\\n|      / \\\n|\n",
-        "_________\n|       |\n|      \\O/\n|      /|\\\n|      / \\\n|\n",
-        "_________\n|       |\n|      \\O/\n|      /|\\\n|      / \\\n|     RIP\n",
-        "_________\n|       |\n|      X_X\n|      /|\\\n|      / \\\n|     RIP\n",
-        "_________\n|       |\n|      DEAD\n|      /|\\\n|      / \\\n|     RIP\n"
+void main_joc::updateHangmanDisplay() {
+    QString states[7][7] = {
+        { "  -----", "  |   |", "      |", "      |", "      |", "      |", "---------" }, // 0
+        { "  -----", "  |   |", "  O   |", "      |", "      |", "      |", "---------" }, // 1
+        { "  -----", "  |   |", "  O   |", "  |   |", "      |", "      |", "---------" }, // 2
+        { "  -----", "  |   |", "  O   |", " /|   |", "      |", "      |", "---------" }, // 3
+        { "  -----", "  |   |", "  O   |", " /|\\  |", "      |", "      |", "---------" }, // 4
+        { "  -----", "  |   |", "  O   |", " /|\\  |", " /    |", "      |", "---------" }, // 5
+        { "  -----", "  |   |", "  O   |", " /|\\  |", " / \\  |", "      |", "---------" }  // 6
     };
 
-    // ma asigur ca indexul este in interval
-    int idx = wrongGuesses;
-    if (idx < 0) idx = 0;
-    if (idx > 11) idx = 11;
+    for (int i = 0; i < hangmanLines.size(); ++i) {
+        hangmanLines[i]->setText(states[wrongGuesses][i]);
 
-    // afisez spanzuratoarea corespunzatoare numarului de greseli
-    hangmanLabel->setText(states[idx]);
+    }
+}
 
-    // fac afisarea cu spatii intre literele cuvantului curent
-    QString spaced;
-    for (QChar c : std::as_const(currentDisplay))
-        spaced += QString(c) + " ";
-    wordLabel->setText(spaced);
+void main_joc::updateDisplay() {
+    updateHangmanDisplay();
 
-    // construiesc sirul cu litere folosite
-    QString usedStr;
-    for (QChar c : std::as_const(usedLetters))
-        usedStr += QString(c) + " ";
-    usedLabel->setText("Litere folosite: " + usedStr);
+    QString displayWord;
+    for (const QChar &c : currentDisplay)
+        displayWord += QString(c) + " ";
+    wordLabel->setText(displayWord.trimmed());
 
-    // afisez scorul si vietile
+    QString used;
+    for (const QChar &c : usedLetters)
+        used += QString(c) + " ";
+    usedLabel->setText("Folosite: " + used.trimmed());
+
     scoreLabel->setText("Scor: " + QString::number(score));
     livesLabel->setText("Vieti: " + QString::number(lives));
 
-    // daca jocul s-a terminat (castigat sau pierdut)
-    if (gameOver) {
-        // afisez cuvantul complet cu litere mari
+    if(gameOver) {
         wordLabel->setText(secretWord.toUpper());
-        // schimb culoarea sa fie verde (cuvant final)
-        wordLabel->setStyleSheet("font-size: 40px; font-weight: bold; color: #2e7d32;");
-        // activez butonul de meniu, ca sa pot reveni la meniul principal
         menuButton->setEnabled(true);
-    } else {
-        // daca jocul nu s-a terminat, culoarea ramane albastra
-        wordLabel->setStyleSheet("font-size: 40px; font-weight: bold; color: #1e88e5;");
     }
 }
 
-// functie care trateaza o incercare (o litera ghicita)
-void main_joc::handleGuess(QChar key) {
-    // daca jocul este deja terminat, nu mai fac nimic
-    if (gameOver) return;
-    // daca nu este litera, nu fac nimic
-    if (!key.isLetter()) return;
+void main_joc::handleGuess(QChar letter) {
+    if(gameOver || !letter.isLetter()) return;
 
-    // transform litera in litera mica
-    key = key.toLower();
+    letter = letter.toLower();
+    if(usedLetters.contains(letter)) return;
 
-    // daca litera a fost deja folosita, ies
-    if (usedLetters.contains(key)) return;
+    usedLetters.insert(letter);
 
-    // adaug litera in setul de litere folosite
-    usedLetters.insert(key);
-
-    bool correct = false;
-
-    // verific fiecare pozitie din cuvantul secret
-    for (int i = 0; i < secretWord.size(); ++i) {
-        if (secretWord[i] == key) {
-            // daca litera se potriveste, o pun in currentDisplay
-            currentDisplay[i] = key;
-            correct = true;
+    bool correctGuess = false;
+    for(int i = 0; i < secretWord.size(); i++) {
+        if(secretWord[i] == letter) {
+            currentDisplay[i] = letter;
+            correctGuess = true;
         }
     }
 
-    // daca litera a fost corecta, cresc scorul
-    if (correct) {
+    if(correctGuess)
         score += 10;
-    } else {
-        // daca litera e gresita, cresc numarul de greseli si scad viata
+    else {
         wrongGuesses++;
         lives--;
     }
 
-    // daca am ghicit tot cuvantul
-    if (currentDisplay == secretWord) {
+    if(currentDisplay == secretWord || wrongGuesses >= maxWrong || lives <= 0) {
         gameOver = true;
-        // nu mai schimb currentDisplay, deja contine cuvantul ghicit
-    } else if (wrongGuesses >= maxWrong || lives <= 0) {
-        // daca am depasit numarul maxim de greseli sau am ramas fara vieti
-        gameOver = true;
-        // fortam afisarea cuvantului corect
         currentDisplay = secretWord;
     }
 
-    // actualizez tot ce se vede pe ecran
     updateDisplay();
 
-    // daca jocul s-a terminat, dezactivez toate butoanele de litere
-    if (gameOver) {
-        for (int i = 0; i < lettersLayout->count(); ++i) {
-            QPushButton *btn = qobject_cast<QPushButton*>(lettersLayout->itemAt(i)->widget());
-            if (btn)
-                btn->setEnabled(false);
+    if(gameOver) {
+        for(int i = 0; i < lettersLayout->count(); i++) {
+            QWidget *w = lettersLayout->itemAt(i)->widget();
+            if(w) w->setEnabled(false);
         }
     }
 }
 
-// functie apelata cand apas o tasta de la tastatura fizica
 void main_joc::keyPressEvent(QKeyEvent *event) {
-    if (!event) return;
-    if (event->text().isEmpty()) return;
-
-    // preiau primul caracter din textul evenimentului
-    QChar key = event->text().at(0);
-    // trimit litera la handleGuess
-    handleGuess(key);
+    if(event && !event->text().isEmpty())
+        handleGuess(event->text().at(0));
 }
 
-// functie apelata cand apas pe un buton de litera din interfata
 void main_joc::letterClicked() {
-    QPushButton *btn = qobject_cast<QPushButton*>(sender());
-    if (!btn) return;
-
-    // litera este textul de pe buton
-    QChar key = btn->text().at(0);
-
-    // dezactivez butonul ca sa nu il mai pot apasa iar
-    btn->setEnabled(false);
-
-    // trimit litera la handleGuess
-    handleGuess(key);
+    QPushButton *button = qobject_cast<QPushButton*>(sender());
+    if(!button) return;
+    button->setEnabled(false);
+    handleGuess(button->text().at(0));
 }
 
-// functie care emite semnalul ca vrem sa ne intoarcem la meniul principal
 void main_joc::backToMenu() {
     emit backToMenuRequested();
+}
+
+void main_joc::restartGame() {
+    startGame();
 }

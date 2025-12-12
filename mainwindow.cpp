@@ -6,6 +6,7 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
     , gameWindow(nullptr)
+
 {
     ui->setupUi(this);
 }
@@ -35,12 +36,11 @@ void MainWindow::on_IesireButton_clicked()
 
 void MainWindow::showMenuAgain()
 {
-    // reapare meniul, inchidem fereastra de joc
+
     this->show();
     if (gameWindow) {
-        gameWindow->hide();    // sau gameWindow->close();
-        // daca vrei sa refaci fereastra la fiecare joc, poti chiar s-o stergi:
-        // gameWindow->deleteLater();
-        // gameWindow = nullptr;
+        gameWindow->hide();
+
+
     }
 }
